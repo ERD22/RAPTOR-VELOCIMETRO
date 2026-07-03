@@ -1,0 +1,10 @@
+{
+  "name": "agenda-diaria",
+  "version": "1.0.0",
+  "description": "Agenda diaria con Clerk, Leaflet y Supabase",
+  "scripts": {
+    "dev": "cd BACKEND && npm start",
+    "build": "cd FRONTEND && npm install && npm run build",
+    "start": "cd BACKEND && npm install && npm start"
+  }
+}

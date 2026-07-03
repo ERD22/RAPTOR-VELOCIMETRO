@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs');
 const { createClient } = require('@supabase/supabase-js');
 const { verifyToken } = require('@clerk/backend');
 require('dotenv').config();
@@ -152,15 +151,12 @@ app.delete('/api/eventos/:id', requireAuth, async (req, res) => {
   }
 });
 
-// Servir archivos estáticos del frontend (excepto index.html)
-app.use(express.static(path.join(__dirname, '../FRONTEND'), { index: false }));
+// Servir archivos estáticos del frontend (build de Vite)
+app.use(express.static(path.join(__dirname, '../FRONTEND/dist')));
 
-// Ruta catch-all para SPA - inyecta variables de entorno al index.html
+// Ruta catch-all para SPA - sirve index.html del build
 app.get('*', (req, res) => {
-  const htmlPath = path.join(__dirname, '../FRONTEND/index.html');
-  let html = fs.readFileSync(htmlPath, 'utf8');
-  html = html.replace('{{CLERK_PUBLISHABLE_KEY}}', (process.env.CLERK_PUBLISHABLE_KEY || '').trim());
-  res.send(html);
+  res.sendFile(path.join(__dirname, '../FRONTEND/dist/index.html'));
 });
 
 app.listen(PORT, () => {
