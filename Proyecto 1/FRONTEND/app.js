@@ -1,128 +1,74 @@
 const API_URL = '/api/eventos';
-const AUTH_URL = '/api/auth';
 
 let eventos = [];
-let usuarioActual = null;
 let mapa = null;
 let marcador = null;
+let signInMounted = false;
 
-// Cargar eventos al iniciar
-document.addEventListener('DOMContentLoaded', () => {
-  verificarSesion();
+window.addEventListener('load', async () => {
+  try {
+    await Clerk.load();
+    if (Clerk.user) {
+      mostrarAgenda();
+      mostrarInfoUsuario();
+      cargarEventos();
+    } else {
+      mostrarAuth();
+    }
+    Clerk.addListener(({ user }) => {
+      if (user) {
+        mostrarAgenda();
+        mostrarInfoUsuario();
+        cargarEventos();
+      } else {
+        mostrarAuth();
+      }
+    });
+  } catch (error) {
+    console.error('Error al cargar Clerk:', error);
+    alert('Error al cargar autenticación');
+  }
 });
 
-// Verificar si hay sesión activa
-function verificarSesion() {
-  const usuario = localStorage.getItem('usuario');
-  if (usuario) {
-    usuarioActual = JSON.parse(usuario);
-    mostrarAgenda();
-    cargarEventos();
-  } else {
-    mostrarAuth();
-  }
-}
-
-// Mostrar sección de autenticación
 function mostrarAuth() {
   document.getElementById('authSection').classList.remove('hidden');
   document.getElementById('agendaSection').classList.add('hidden');
+  if (!signInMounted) {
+    Clerk.mountSignIn(document.getElementById('sign-in'));
+    signInMounted = true;
+  }
 }
 
-// Mostrar sección de agenda
 function mostrarAgenda() {
   document.getElementById('authSection').classList.add('hidden');
   document.getElementById('agendaSection').classList.remove('hidden');
 }
 
-// Mostrar formulario de login
-function showLogin() {
-  document.getElementById('loginForm').classList.remove('hidden');
-  document.getElementById('registerForm').classList.add('hidden');
-  document.getElementById('loginTab').classList.remove('bg-gray-300', 'text-gray-700');
-  document.getElementById('loginTab').classList.add('bg-blue-500', 'text-white');
-  document.getElementById('registerTab').classList.remove('bg-green-500', 'text-white');
-  document.getElementById('registerTab').classList.add('bg-gray-300', 'text-gray-700');
+function mostrarInfoUsuario() {
+  const user = Clerk.user;
+  const email = user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || 'Usuario';
+  document.getElementById('userInfo').textContent = `Hola, ${email}`;
 }
 
-// Mostrar formulario de registro
-function showRegister() {
-  document.getElementById('loginForm').classList.add('hidden');
-  document.getElementById('registerForm').classList.remove('hidden');
-  document.getElementById('loginTab').classList.remove('bg-blue-500', 'text-white');
-  document.getElementById('loginTab').classList.add('bg-gray-300', 'text-gray-700');
-  document.getElementById('registerTab').classList.remove('bg-gray-300', 'text-gray-700');
-  document.getElementById('registerTab').classList.add('bg-green-500', 'text-white');
+async function logout() {
+  await Clerk.signOut();
+  location.reload();
 }
 
-// Manejar login
-async function handleLogin(event) {
-  event.preventDefault();
-  
-  const email = document.getElementById('loginEmail').value;
-  const password = document.getElementById('loginPassword').value;
-  
-  try {
-    const response = await fetch(`${AUTH_URL}/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    
-    const data = await response.json();
-    
-    if (response.ok) {
-      usuarioActual = data.usuario;
-      localStorage.setItem('usuario', JSON.stringify(usuarioActual));
-      mostrarAgenda();
-      cargarEventos();
-      alert('¡Login exitoso!');
-    } else {
-      alert(data.mensaje || 'Error al hacer login');
-    }
-  } catch (error) {
-    console.error('Error al hacer login:', error);
-    alert('Error al conectar con el servidor');
+async function fetchWithAuth(url, options = {}) {
+  const token = await Clerk.session?.getToken();
+  if (!token) {
+    logout();
+    throw new Error('Sesión expirada');
   }
-}
-
-// Manejar registro
-async function handleRegister(event) {
-  event.preventDefault();
-  
-  const email = document.getElementById('registerEmail').value;
-  const password = document.getElementById('registerPassword').value;
-  const nombre = document.getElementById('registerNombre').value;
-  const apellido = document.getElementById('registerApellido').value;
-  
-  try {
-    const response = await fetch(`${AUTH_URL}/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, nombre, apellido })
-    });
-    
-    const data = await response.json();
-    
-    if (response.ok) {
-      alert('¡Registro exitoso! Ahora puedes iniciar sesión.');
-      showLogin();
-      document.getElementById('registerForm').querySelector('form').reset();
-    } else {
-      alert(data.mensaje || 'Error al registrar usuario');
-    }
-  } catch (error) {
-    console.error('Error al registrar:', error);
-    alert('Error al conectar con el servidor');
+  const headers = {
+    'Authorization': `Bearer ${token}`,
+    ...(options.headers || {})
+  };
+  if (options.body && typeof options.body === 'string' && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
   }
-}
-
-// Cerrar sesión
-function logout() {
-  usuarioActual = null;
-  localStorage.removeItem('usuario');
-  mostrarAuth();
-  document.getElementById('loginForm').querySelector('form').reset();
+  return fetch(url, { ...options, headers });
 }
 
 // Formulario submit
@@ -150,7 +96,11 @@ document.getElementById('eventoForm').addEventListener('submit', async (e) => {
 
 async function cargarEventos() {
   try {
-    const response = await fetch(API_URL);
+    const response = await fetchWithAuth(API_URL);
+    if (response.status === 401) {
+      logout();
+      return;
+    }
     eventos = await response.json();
     renderizarEventos();
   } catch (error) {
@@ -162,12 +112,14 @@ async function cargarEventos() {
 
 async function crearEvento(evento) {
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetchWithAuth(API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(evento)
     });
-    
+    if (response.status === 401) {
+      logout();
+      return;
+    }
     if (response.ok) {
       await cargarEventos();
     }
@@ -179,10 +131,12 @@ async function crearEvento(evento) {
 
 async function eliminarEvento(id) {
   if (!confirm('¿Estás seguro de eliminar este evento?')) return;
-  
   try {
-    const response = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
-    
+    const response = await fetchWithAuth(`${API_URL}/${id}`, { method: 'DELETE' });
+    if (response.status === 401) {
+      logout();
+      return;
+    }
     if (response.ok) {
       await cargarEventos();
     }

@@ -1,8 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const { createClient } = require('@supabase/supabase-js');
-const bcrypt = require('bcryptjs');
+const { verifyToken } = require('@clerk/backend');
 require('dotenv').config();
 
 const app = express();
@@ -23,93 +24,37 @@ const supabase = createClient(
 
 console.log('Conectado a Supabase');
 
-//mi endpoint de prueba
-app.get('/api/saludo', (req,res) => {
+// Middleware de autenticación con Clerk
+const requireAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ mensaje: 'Token no proporcionado' });
+    }
+    const token = authHeader.split(' ')[1];
+    const payload = await verifyToken(token, {
+      secretKey: process.env.CLERK_SECRET_KEY
+    });
+    req.auth = payload;
+    next();
+  } catch (error) {
+    console.error('Error al verificar token:', error);
+    res.status(401).json({ mensaje: 'No autorizado' });
+  }
+};
+
+// Endpoint de prueba
+app.get('/api/saludo', (req, res) => {
   res.json('Hola mundo');
 });
 
-// POST - Registrar nuevo usuario
-app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { email, password, nombre, apellido } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ mensaje: 'Email y password son requeridos' });
-    }
-    
-    // Verificar si el usuario ya existe
-    const { data: existingUser } = await supabase
-      .from('usuarios')
-      .select('email')
-      .eq('email', email)
-      .single();
-    
-    if (existingUser) {
-      return res.status(400).json({ mensaje: 'El email ya está registrado' });
-    }
-    
-    // Encriptar password
-    const password_hash = await bcrypt.hash(password, 10);
-    
-    // Crear usuario
-    const { data, error } = await supabase
-      .from('usuarios')
-      .insert([
-        { email, password_hash, nombre, apellido }
-      ])
-      .select();
-    
-    if (error) throw error;
-    
-    res.status(201).json({ 
-      mensaje: 'Usuario registrado exitosamente',
-      usuario: { id: data[0].id, email: data[0].email, nombre: data[0].nombre }
-    });
-  } catch (error) {
-    console.error('Error al registrar usuario:', error);
-    res.status(500).json({ mensaje: 'Error al registrar usuario' });
-  }
-});
-
-// POST - Login
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ mensaje: 'Email y password son requeridos' });
-    }
-    
-    // Buscar usuario por email
-    const { data, error } = await supabase
-      .from('usuarios')
-      .select('*')
-      .eq('email', email)
-      .single();
-    
-    if (error || !data) {
-      return res.status(401).json({ mensaje: 'Credenciales inválidas' });
-    }
-    
-    // Verificar password
-    const passwordValido = await bcrypt.compare(password, data.password_hash);
-    
-    if (!passwordValido) {
-      return res.status(401).json({ mensaje: 'Credenciales inválidas' });
-    }
-    
-    res.json({ 
-      mensaje: 'Login exitoso',
-      usuario: { id: data.id, email: data.email, nombre: data.nombre }
-    });
-  } catch (error) {
-    console.error('Error al hacer login:', error);
-    res.status(500).json({ mensaje: 'Error al hacer login' });
-  }
+// GET - Información del usuario autenticado
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  res.json({ userId: req.auth.userId });
 });
 
 // GET - Obtener todos los eventos
-app.get('/api/eventos', async (req, res) => {
+app.get('/api/eventos', requireAuth, async (req, res) => {
   try {
     console.log('Obteniendo eventos...');
     const { data, error } = await supabase
@@ -130,7 +75,7 @@ app.get('/api/eventos', async (req, res) => {
 });
 
 // GET - Obtener evento por ID
-app.get('/api/eventos/:id', async (req, res) => {
+app.get('/api/eventos/:id', requireAuth, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('eventos')
@@ -149,7 +94,7 @@ app.get('/api/eventos/:id', async (req, res) => {
 });
 
 // POST - Crear nuevo evento
-app.post('/api/eventos', async (req, res) => {
+app.post('/api/eventos', requireAuth, async (req, res) => {
   try {
     const { titulo, descripcion, fecha, hora, latitud, longitud } = req.body;
     
@@ -172,7 +117,7 @@ app.post('/api/eventos', async (req, res) => {
 });
 
 // PUT - Actualizar evento
-app.put('/api/eventos/:id', async (req, res) => {
+app.put('/api/eventos/:id', requireAuth, async (req, res) => {
   try {
     const { titulo, descripcion, fecha, hora } = req.body;
     
@@ -193,7 +138,7 @@ app.put('/api/eventos/:id', async (req, res) => {
 });
 
 // DELETE - Eliminar evento
-app.delete('/api/eventos/:id', async (req, res) => {
+app.delete('/api/eventos/:id', requireAuth, async (req, res) => {
   try {
     const { error } = await supabase
       .from('eventos')
@@ -207,12 +152,15 @@ app.delete('/api/eventos/:id', async (req, res) => {
   }
 });
 
-// Servir archivos estáticos del frontend
-app.use(express.static(path.join(__dirname, '../FRONTEND')));
+// Servir archivos estáticos del frontend (excepto index.html)
+app.use(express.static(path.join(__dirname, '../FRONTEND'), { index: false }));
 
-// Ruta catch-all para SPA - sirve index.html para cualquier ruta que no sea API
+// Ruta catch-all para SPA - inyecta variables de entorno al index.html
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../FRONTEND/index.html'));
+  const htmlPath = path.join(__dirname, '../FRONTEND/index.html');
+  let html = fs.readFileSync(htmlPath, 'utf8');
+  html = html.replace('{{CLERK_PUBLISHABLE_KEY}}', process.env.CLERK_PUBLISHABLE_KEY || '');
+  res.send(html);
 });
 
 app.listen(PORT, () => {
