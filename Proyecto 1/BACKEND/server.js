@@ -159,7 +159,7 @@ app.use(express.static(path.join(__dirname, '../FRONTEND'), { index: false }));
 app.get('*', (req, res) => {
   const htmlPath = path.join(__dirname, '../FRONTEND/index.html');
   let html = fs.readFileSync(htmlPath, 'utf8');
-  html = html.replace('{{CLERK_PUBLISHABLE_KEY}}', process.env.CLERK_PUBLISHABLE_KEY || '');
+  html = html.replace('{{CLERK_PUBLISHABLE_KEY}}', (process.env.CLERK_PUBLISHABLE_KEY || '').trim());
   res.send(html);
 });
 
