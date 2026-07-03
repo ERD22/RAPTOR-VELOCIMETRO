@@ -1,5 +1,0 @@
-{
-  "dependencies": {
-    "@clerk/backend": "^3.10.0"
-  }
-}
