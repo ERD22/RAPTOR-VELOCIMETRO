@@ -43,3 +43,13 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Temporary debug files
+crash*.txt
+logcat*.txt
+app_logs.txt
+screen*.png
+test.txt
+
+# Obsolete nested project path
+/APP MOVIL/
