@@ -90,19 +90,20 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
       });
     }
 
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 0,
-      ),
-    ).listen(
-      (Position position) {
-        _updateFromPosition(position);
-      },
-      onError: (error) {
-        if (mounted) setState(() => _status = 'Error GPS: $error');
-      },
-    );
+    _positionStream =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.bestForNavigation,
+            distanceFilter: 0,
+          ),
+        ).listen(
+          (Position position) {
+            _updateFromPosition(position);
+          },
+          onError: (error) {
+            if (mounted) setState(() => _status = 'Error GPS: $error');
+          },
+        );
   }
 
   void _updateFromPosition(Position position) {
@@ -116,7 +117,8 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
         _speedMph = mph;
         _lastPosition = position;
         _lastUpdate = DateTime.now();
-        _status = 'GPS activo · Precisión ${position.accuracy.toStringAsFixed(1)} m';
+        _status =
+            'GPS activo · Precisión ${position.accuracy.toStringAsFixed(1)} m';
       });
     }
   }
@@ -167,129 +169,143 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
     const double gaugeSize = 340;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0F19),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.refresh, color: Colors.white70),
-                          onPressed: _initLocation,
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset('assets/fondo.png', fit: BoxFit.cover),
+          ),
+          Positioned.fill(
+            child: Container(color: Colors.black.withOpacity(0.35)),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.refresh, color: Colors.white70),
+                        onPressed: _initLocation,
+                      ),
+                      Text(
+                        'VELOCÍMETRO',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              letterSpacing: 3,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white70,
+                            ),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          _useMetric ? Icons.social_distance : Icons.speed,
+                          color: Colors.white70,
                         ),
-                        Text(
-                          'VELOCÍMETRO',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                letterSpacing: 3,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white70,
-                              ),
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            _useMetric ? Icons.social_distance : Icons.speed,
-                            color: Colors.white70,
-                          ),
-                          onPressed: _toggleUnit,
-                          tooltip: _useMetric ? 'Cambiar a mph' : 'Cambiar a km/h',
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: SizedBox(
-                        width: gaugeSize,
-                        height: gaugeSize,
-                        child: _SpeedometerGauge(
-                          speedValue: _displaySpeed,
-                          maxSpeed: maxSpeed,
-                          unit: unit,
-                        ),
+                        onPressed: _toggleUnit,
+                        tooltip: _useMetric
+                            ? 'Cambiar a mph'
+                            : 'Cambiar a km/h',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: SizedBox(
+                      width: gaugeSize,
+                      height: gaugeSize,
+                      child: _SpeedometerGauge(
+                        speedValue: _displaySpeed,
+                        maxSpeed: maxSpeed,
+                        unit: unit,
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    _InfoCard(
-                      label: 'Estado',
-                      value: _status,
-                      icon: Icons.gps_fixed,
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _InfoCard(
-                            label: 'Latitud',
-                            value: _lastPosition != null
-                                ? _lastPosition!.latitude.toStringAsFixed(5)
-                                : '--',
-                            icon: Icons.location_on,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _InfoCard(
-                            label: 'Longitud',
-                            value: _lastPosition != null
-                                ? _lastPosition!.longitude.toStringAsFixed(5)
-                                : '--',
-                            icon: Icons.location_on_outlined,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _InfoCard(
-                            label: 'Altitud',
-                            value: _lastPosition != null
-                                ? '${_lastPosition!.altitude.toStringAsFixed(0)} m'
-                                : '--',
-                            icon: Icons.terrain,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _InfoCard(
-                            label: 'Actualización',
-                            value: _lastUpdate != null
-                                ? '${DateTime.now().difference(_lastUpdate!).inMilliseconds} ms'
-                                : '--',
-                            icon: Icons.timer,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 52,
-                      child: ElevatedButton.icon(
-                        onPressed: _toggleTracking,
-                        icon: Icon(_isTracking ? Icons.pause : Icons.play_arrow),
-                        label: Text(
-                          _isTracking ? 'DETENER' : 'INICIAR',
-                          style: const TextStyle(letterSpacing: 2),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              _isTracking ? Colors.redAccent : Colors.greenAccent,
-                          foregroundColor: Colors.black,
-                          textStyle: const TextStyle(fontSize: 18),
+                  ),
+                  const SizedBox(height: 16),
+                  _InfoCard(
+                    label: 'Estado',
+                    value: _status,
+                    icon: Icons.gps_fixed,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _InfoCard(
+                          label: 'Latitud',
+                          value: _lastPosition != null
+                              ? _lastPosition!.latitude.toStringAsFixed(5)
+                              : '--',
+                          icon: Icons.location_on,
                         ),
                       ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _InfoCard(
+                          label: 'Longitud',
+                          value: _lastPosition != null
+                              ? _lastPosition!.longitude.toStringAsFixed(5)
+                              : '--',
+                          icon: Icons.location_on_outlined,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _InfoCard(
+                          label: 'Altitud',
+                          value: _lastPosition != null
+                              ? '${_lastPosition!.altitude.toStringAsFixed(0)} m'
+                              : '--',
+                          icon: Icons.terrain,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _InfoCard(
+                          label: 'Actualización',
+                          value: _lastUpdate != null
+                              ? '${DateTime.now().difference(_lastUpdate!).inMilliseconds} ms'
+                              : '--',
+                          icon: Icons.timer,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: _toggleTracking,
+                      icon: Icon(_isTracking ? Icons.pause : Icons.play_arrow),
+                      label: Text(
+                        _isTracking ? 'DETENER' : 'INICIAR',
+                        style: const TextStyle(letterSpacing: 2),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _isTracking
+                            ? Colors.redAccent
+                            : Colors.greenAccent,
+                        foregroundColor: Colors.black,
+                        textStyle: const TextStyle(fontSize: 18),
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
               ),
             ),
-          );
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -341,9 +357,11 @@ class SpeedometerPainter extends CustomPainter {
       final isMajor = i % 4 == 0;
       final innerRadius = isMajor ? radius - 36 : radius - 24;
       final outerRadius = radius - 16;
-      final p1 = center +
+      final p1 =
+          center +
           Offset(math.cos(angle) * innerRadius, math.sin(angle) * innerRadius);
-      final p2 = center +
+      final p2 =
+          center +
           Offset(math.cos(angle) * outerRadius, math.sin(angle) * outerRadius);
       canvas.drawLine(p1, p2, isMajor ? majorTickPaint : tickPaint);
     }
@@ -363,11 +381,9 @@ class SpeedometerPainter extends CustomPainter {
       final speedValue = (step * i).round();
       final angle = startAngle + (sweepAngle / 11) * i;
       final textRadius = radius - 58;
-      final textCenter = center +
-          Offset(
-            math.cos(angle) * textRadius,
-            math.sin(angle) * textRadius,
-          );
+      final textCenter =
+          center +
+          Offset(math.cos(angle) * textRadius, math.sin(angle) * textRadius);
       textPainterConfig.text = TextSpan(
         text: speedValue.toString(),
         style: textStyle,
@@ -412,9 +428,12 @@ class SpeedometerPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4
       ..strokeCap = StrokeCap.round;
-    final needleTip = center +
-        Offset(math.cos(needleAngle) * needleLength,
-            math.sin(needleAngle) * needleLength);
+    final needleTip =
+        center +
+        Offset(
+          math.cos(needleAngle) * needleLength,
+          math.sin(needleAngle) * needleLength,
+        );
     canvas.drawLine(center, needleTip, needlePaint);
 
     final centerDotPaint = Paint()
@@ -433,8 +452,10 @@ class SpeedometerPainter extends CustomPainter {
     textPainterConfig.paint(
       canvas,
       center -
-          Offset(textPainterConfig.width / 2,
-              textPainterConfig.height / 2 + radius * 0.02),
+          Offset(
+            textPainterConfig.width / 2,
+            textPainterConfig.height / 2 + radius * 0.02,
+          ),
     );
 
     final unitStyle = TextStyle(
@@ -446,8 +467,7 @@ class SpeedometerPainter extends CustomPainter {
     textPainterConfig.layout();
     textPainterConfig.paint(
       canvas,
-      center +
-          Offset(-textPainterConfig.width / 2, radius * 0.22),
+      center + Offset(-textPainterConfig.width / 2, radius * 0.22),
     );
   }
 
@@ -488,9 +508,10 @@ class _SpeedometerGaugeState extends State<_SpeedometerGauge>
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _animation = Tween<double>(begin: 0.0, end: 0.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
+    _animation = Tween<double>(
+      begin: 0.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.value = 0.0;
   }
 
@@ -504,9 +525,7 @@ class _SpeedometerGaugeState extends State<_SpeedometerGauge>
     _animation = Tween<double>(
       begin: _controller.value,
       end: target,
-    ).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller
       ..reset()
       ..forward();
@@ -570,10 +589,7 @@ class _InfoCard extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 label,
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 12,
-                ),
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
               ),
             ],
           ),
