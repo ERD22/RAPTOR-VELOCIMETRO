@@ -52,27 +52,16 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
   Position? _lastPosition;
   DateTime? _lastUpdate;
 
-  late AnimationController _needleController;
-  late Animation<double> _needleAnimation;
-
   @override
   void initState() {
     super.initState();
-    _needleController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _needleAnimation = Tween<double>(begin: 0.0, end: 0.0).animate(
-      CurvedAnimation(parent: _needleController, curve: Curves.easeOutCubic),
-    );
-    _needleController.value = 0.0;
     _initLocation();
   }
 
   Future<void> _initLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      setState(() => _status = 'Activa el GPS del dispositivo');
+      if (mounted) setState(() => _status = 'Activa el GPS del dispositivo');
       return;
     }
 
@@ -80,13 +69,13 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        setState(() => _status = 'Permiso de ubicación denegado');
+        if (mounted) setState(() => _status = 'Permiso de ubicación denegado');
         return;
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      setState(() => _status = 'Permiso denegado permanentemente');
+      if (mounted) setState(() => _status = 'Permiso denegado permanentemente');
       return;
     }
 
@@ -94,10 +83,12 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
   }
 
   void _startTracking() {
-    setState(() {
-      _isTracking = true;
-      _status = 'GPS activo';
-    });
+    if (mounted) {
+      setState(() {
+        _isTracking = true;
+        _status = 'GPS activo';
+      });
+    }
 
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
@@ -109,7 +100,7 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
         _updateFromPosition(position);
       },
       onError: (error) {
-        setState(() => _status = 'Error GPS: $error');
+        if (mounted) setState(() => _status = 'Error GPS: $error');
       },
     );
   }
@@ -119,48 +110,29 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
     final double kmh = speedMs < 0 ? 0.0 : speedMs * 3.6;
     final double mph = kmh * 0.621371;
 
-    final currentDisplay = _useMetric ? kmh : mph;
-    final maxValue = _useMetric ? 220.0 : 140.0;
-    final target = (currentDisplay / maxValue).clamp(0.0, 1.0);
-
-    _needleAnimation = Tween<double>(
-      begin: _needleController.value,
-      end: target,
-    ).animate(
-      CurvedAnimation(parent: _needleController, curve: Curves.easeOutCubic),
-    );
-    _needleController
-      ..reset()
-      ..forward();
-
-    setState(() {
-      _speedKmh = kmh;
-      _speedMph = mph;
-      _lastPosition = position;
-      _lastUpdate = DateTime.now();
-      _status = 'GPS activo · Precisión ${position.accuracy.toStringAsFixed(1)} m';
-    });
+    if (mounted) {
+      setState(() {
+        _speedKmh = kmh;
+        _speedMph = mph;
+        _lastPosition = position;
+        _lastUpdate = DateTime.now();
+        _status = 'GPS activo · Precisión ${position.accuracy.toStringAsFixed(1)} m';
+      });
+    }
   }
 
   void _stopTracking() {
     _positionStream?.cancel();
-    _needleAnimation = Tween<double>(
-      begin: _needleController.value,
-      end: 0.0,
-    ).animate(
-      CurvedAnimation(parent: _needleController, curve: Curves.easeOutCubic),
-    );
-    _needleController
-      ..reset()
-      ..forward();
-    setState(() {
-      _isTracking = false;
-      _status = 'Pausado';
-      _speedKmh = 0.0;
-      _speedMph = 0.0;
-      _lastPosition = null;
-      _lastUpdate = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isTracking = false;
+        _status = 'Pausado';
+        _speedKmh = 0.0;
+        _speedMph = 0.0;
+        _lastPosition = null;
+        _lastUpdate = null;
+      });
+    }
   }
 
   void _toggleTracking() {
@@ -183,7 +155,6 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
   @override
   void dispose() {
     _positionStream?.cancel();
-    _needleController.dispose();
     super.dispose();
   }
 
@@ -198,19 +169,17 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
   Widget build(BuildContext context) {
     final double maxSpeed = _useMetric ? 220.0 : 140.0;
     final String unit = _useMetric ? 'km/h' : 'mph';
+    const double gaugeSize = 340;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B0F19),
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final double gaugeSize = math.min(constraints.maxWidth - 48, 340);
-            return SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -241,19 +210,10 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
                       child: SizedBox(
                         width: gaugeSize,
                         height: gaugeSize,
-                        child: AnimatedBuilder(
-                          animation: _needleAnimation,
-                          builder: (context, child) {
-                            return CustomPaint(
-                              size: Size.infinite,
-                              painter: SpeedometerPainter(
-                                value: _needleAnimation.value,
-                                maxSpeed: maxSpeed,
-                                unit: unit,
-                                speedText: _speedText,
-                              ),
-                            );
-                          },
+                        child: _SpeedometerGauge(
+                          speedValue: _displaySpeed,
+                          maxSpeed: maxSpeed,
+                          unit: unit,
                         ),
                       ),
                     ),
@@ -333,11 +293,8 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
                   ],
                 ),
               ),
-            );
-          },
-        ),
-      ),
-    );
+            ),
+          );
   }
 }
 
@@ -472,7 +429,7 @@ class SpeedometerPainter extends CustomPainter {
 
     final speedValueStyle = TextStyle(
       color: Colors.white,
-      fontSize: radius * 0.55,
+      fontSize: radius * 0.45,
       fontWeight: FontWeight.bold,
       height: 1.0,
     );
@@ -482,7 +439,7 @@ class SpeedometerPainter extends CustomPainter {
       canvas,
       center -
           Offset(textPainterConfig.width / 2,
-              textPainterConfig.height / 2 + radius * 0.05),
+              textPainterConfig.height / 2 + radius * 0.02),
     );
 
     final unitStyle = TextStyle(
@@ -505,6 +462,88 @@ class SpeedometerPainter extends CustomPainter {
         oldDelegate.speedText != speedText ||
         oldDelegate.unit != unit ||
         oldDelegate.maxSpeed != maxSpeed;
+  }
+}
+
+class _SpeedometerGauge extends StatefulWidget {
+  final double speedValue;
+  final double maxSpeed;
+  final String unit;
+
+  const _SpeedometerGauge({
+    required this.speedValue,
+    required this.maxSpeed,
+    required this.unit,
+  });
+
+  @override
+  State<_SpeedometerGauge> createState() => _SpeedometerGaugeState();
+}
+
+class _SpeedometerGaugeState extends State<_SpeedometerGauge>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+  double _lastValue = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _animation = Tween<double>(begin: 0.0, end: 0.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+    _controller.value = 0.0;
+  }
+
+  @override
+  void didUpdateWidget(covariant _SpeedometerGauge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final target = (widget.speedValue / widget.maxSpeed).clamp(0.0, 1.0);
+    if ((target - _lastValue).abs() < 0.001) return;
+    _lastValue = target;
+
+    _animation = Tween<double>(
+      begin: _controller.value,
+      end: target,
+    ).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+    _controller
+      ..reset()
+      ..forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String get _speedText {
+    if (widget.speedValue < 1) return '0';
+    return widget.speedValue.round().toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return CustomPaint(
+          size: Size.infinite,
+          painter: SpeedometerPainter(
+            value: _animation.value,
+            maxSpeed: widget.maxSpeed,
+            unit: widget.unit,
+            speedText: _speedText,
+          ),
+        );
+      },
+    );
   }
 }
 
