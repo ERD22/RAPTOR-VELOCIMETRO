@@ -51,6 +51,8 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
 
   Position? _lastPosition;
   DateTime? _lastUpdate;
+  double _lastValidKmh = 0.0;
+  final List<double> _recentKmhReadings = [];
 
   @override
   void initState() {
@@ -109,14 +111,39 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
   void _updateFromPosition(Position position) {
     final double speedMs = position.speed;
     final double kmh = speedMs < 0 ? 0.0 : speedMs * 3.6;
-    final double mph = kmh * 0.621371;
+
+    if (position.accuracy > 30) return;
+
+    final now = DateTime.now();
+
+    if (_lastUpdate != null) {
+      final double deltaSeconds =
+          now.difference(_lastUpdate!).inMilliseconds / 1000.0;
+      if (deltaSeconds > 0) {
+        final double deltaKmh = (kmh - _lastValidKmh).abs();
+        if (deltaKmh / deltaSeconds > 15.0) return;
+      }
+    }
+
+    _lastPosition = position;
+    _lastUpdate = now;
+    _lastValidKmh = kmh;
+
+    _recentKmhReadings.add(kmh);
+    if (_recentKmhReadings.length > 3) {
+      _recentKmhReadings.removeAt(0);
+    }
+
+    double smoothedKmh =
+        _recentKmhReadings.reduce((a, b) => a + b) / _recentKmhReadings.length;
+    if (smoothedKmh < 2.0) smoothedKmh = 0.0;
+
+    final double mph = smoothedKmh * 0.621371;
 
     if (mounted) {
       setState(() {
-        _speedKmh = kmh;
+        _speedKmh = smoothedKmh;
         _speedMph = mph;
-        _lastPosition = position;
-        _lastUpdate = DateTime.now();
         _status =
             'GPS activo · Precisión ${position.accuracy.toStringAsFixed(1)} m';
       });
@@ -169,141 +196,124 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
     const double gaugeSize = 340;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: Image.asset('assets/fondo.png', fit: BoxFit.cover),
-          ),
-          Positioned.fill(
-            child: Container(color: Colors.black.withOpacity(0.35)),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+      backgroundColor: const Color(0xFF0B0F19),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.refresh, color: Colors.white70),
-                        onPressed: _initLocation,
-                      ),
-                      Text(
-                        'VELOCÍMETRO',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              letterSpacing: 3,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white70,
-                            ),
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          _useMetric ? Icons.social_distance : Icons.speed,
-                          color: Colors.white70,
-                        ),
-                        onPressed: _toggleUnit,
-                        tooltip: _useMetric
-                            ? 'Cambiar a mph'
-                            : 'Cambiar a km/h',
-                      ),
-                    ],
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: Colors.white70),
+                    onPressed: _initLocation,
                   ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: SizedBox(
-                      width: gaugeSize,
-                      height: gaugeSize,
-                      child: _SpeedometerGauge(
-                        speedValue: _displaySpeed,
-                        maxSpeed: maxSpeed,
-                        unit: unit,
-                      ),
+                  Text(
+                    'VELOCÍMETRO',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      letterSpacing: 3,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white70,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  _InfoCard(
-                    label: 'Estado',
-                    value: _status,
-                    icon: Icons.gps_fixed,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _InfoCard(
-                          label: 'Latitud',
-                          value: _lastPosition != null
-                              ? _lastPosition!.latitude.toStringAsFixed(5)
-                              : '--',
-                          icon: Icons.location_on,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _InfoCard(
-                          label: 'Longitud',
-                          value: _lastPosition != null
-                              ? _lastPosition!.longitude.toStringAsFixed(5)
-                              : '--',
-                          icon: Icons.location_on_outlined,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _InfoCard(
-                          label: 'Altitud',
-                          value: _lastPosition != null
-                              ? '${_lastPosition!.altitude.toStringAsFixed(0)} m'
-                              : '--',
-                          icon: Icons.terrain,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _InfoCard(
-                          label: 'Actualización',
-                          value: _lastUpdate != null
-                              ? '${DateTime.now().difference(_lastUpdate!).inMilliseconds} ms'
-                              : '--',
-                          icon: Icons.timer,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      onPressed: _toggleTracking,
-                      icon: Icon(_isTracking ? Icons.pause : Icons.play_arrow),
-                      label: Text(
-                        _isTracking ? 'DETENER' : 'INICIAR',
-                        style: const TextStyle(letterSpacing: 2),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _isTracking
-                            ? Colors.redAccent
-                            : Colors.greenAccent,
-                        foregroundColor: Colors.black,
-                        textStyle: const TextStyle(fontSize: 18),
-                      ),
+                  IconButton(
+                    icon: Icon(
+                      _useMetric ? Icons.social_distance : Icons.speed,
+                      color: Colors.white70,
                     ),
+                    onPressed: _toggleUnit,
+                    tooltip: _useMetric ? 'Cambiar a mph' : 'Cambiar a km/h',
                   ),
-                  const SizedBox(height: 12),
                 ],
               ),
-            ),
+              const SizedBox(height: 8),
+              Center(
+                child: SizedBox(
+                  width: gaugeSize,
+                  height: gaugeSize,
+                  child: _SpeedometerGauge(
+                    speedValue: _displaySpeed,
+                    maxSpeed: maxSpeed,
+                    unit: unit,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _InfoCard(label: 'Estado', value: _status, icon: Icons.gps_fixed),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _InfoCard(
+                      label: 'Latitud',
+                      value: _lastPosition != null
+                          ? _lastPosition!.latitude.toStringAsFixed(5)
+                          : '--',
+                      icon: Icons.location_on,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _InfoCard(
+                      label: 'Longitud',
+                      value: _lastPosition != null
+                          ? _lastPosition!.longitude.toStringAsFixed(5)
+                          : '--',
+                      icon: Icons.location_on_outlined,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _InfoCard(
+                      label: 'Altitud',
+                      value: _lastPosition != null
+                          ? '${_lastPosition!.altitude.toStringAsFixed(0)} m'
+                          : '--',
+                      icon: Icons.terrain,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _InfoCard(
+                      label: 'Actualización',
+                      value: _lastUpdate != null
+                          ? '${DateTime.now().difference(_lastUpdate!).inMilliseconds} ms'
+                          : '--',
+                      icon: Icons.timer,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: _toggleTracking,
+                  icon: Icon(_isTracking ? Icons.pause : Icons.play_arrow),
+                  label: Text(
+                    _isTracking ? 'DETENER' : 'INICIAR',
+                    style: const TextStyle(letterSpacing: 2),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isTracking
+                        ? Colors.redAccent
+                        : Colors.greenAccent,
+                    foregroundColor: Colors.black,
+                    textStyle: const TextStyle(fontSize: 18),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
