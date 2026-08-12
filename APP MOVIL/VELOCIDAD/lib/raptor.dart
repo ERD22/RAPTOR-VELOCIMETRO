@@ -52,6 +52,7 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
   Position? _lastPosition;
   DateTime? _lastUpdate;
   double _lastValidKmh = 0.0;
+  double _lastRawKmh = 0.0;
   final List<double> _recentKmhReadings = [];
 
   @override
@@ -110,33 +111,53 @@ class _SpeedometerScreenState extends State<SpeedometerScreen>
 
   void _updateFromPosition(Position position) {
     final double speedMs = position.speed;
-    final double kmh = speedMs < 0 ? 0.0 : speedMs * 3.6;
+    double kmh = speedMs < 0 ? 0.0 : speedMs * 3.6;
+    final double rawKmh = kmh;
 
     if (position.accuracy > 30) return;
+    if (kmh > 250) return;
 
     final now = DateTime.now();
+    bool forcedZero = false;
 
-    if (_lastUpdate != null) {
+    if (_lastPosition != null) {
+      final double distance = Geolocator.distanceBetween(
+        _lastPosition!.latitude,
+        _lastPosition!.longitude,
+        position.latitude,
+        position.longitude,
+      );
+      if (distance < position.accuracy) {
+        kmh = 0.0;
+        forcedZero = true;
+      }
+    }
+
+    if (!forcedZero && _lastUpdate != null) {
       final double deltaSeconds =
           now.difference(_lastUpdate!).inMilliseconds / 1000.0;
-      if (deltaSeconds > 0) {
-        final double deltaKmh = (kmh - _lastValidKmh).abs();
-        if (deltaKmh / deltaSeconds > 15.0) return;
-      }
+      if (deltaSeconds < 0.1) return;
+      final double deltaKmh = (rawKmh - _lastRawKmh).abs();
+      if (deltaKmh / deltaSeconds > 8.0) return;
     }
 
     _lastPosition = position;
     _lastUpdate = now;
-    _lastValidKmh = kmh;
+    if (!forcedZero) _lastRawKmh = rawKmh;
 
     _recentKmhReadings.add(kmh);
-    if (_recentKmhReadings.length > 3) {
+    if (_recentKmhReadings.length > 5) {
       _recentKmhReadings.removeAt(0);
     }
 
-    double smoothedKmh =
-        _recentKmhReadings.reduce((a, b) => a + b) / _recentKmhReadings.length;
-    if (smoothedKmh < 2.0) smoothedKmh = 0.0;
+    final sorted = List<double>.from(_recentKmhReadings)..sort();
+    final int mid = sorted.length ~/ 2;
+    double smoothedKmh = sorted.length.isOdd
+        ? sorted[mid]
+        : (sorted[mid - 1] + sorted[mid]) / 2;
+    if (smoothedKmh < 3.0) smoothedKmh = 0.0;
+
+    _lastValidKmh = smoothedKmh;
 
     final double mph = smoothedKmh * 0.621371;
 
